@@ -1,27 +1,33 @@
-const { Telegraf } = require('telegraf');
+// api/webhook.js
 const axios = require('axios');
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
-
-bot.command('btc', async (ctx) => {
-  try {
-    const res = await axios.get('https://api.bitget.com/api/v2/market/ticker?symbol=BTCUSDT');
-    const price = parseFloat(res.data.data.last).toFixed(2);
-    ctx.reply(`BTC/USDT 当前价格为: $${price}`);
-  } catch (error) {
-    ctx.reply('❌ 无法取得 Bitget 数据');
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(200).send('Telegram bot webhook is running ✅');
   }
-});
 
-bot.on('text', (ctx) => {
-  ctx.reply('請輸入 /btc 查詢 BTC 價格。');
-});
+  const { message } = req.body;
+  const chatId = message?.chat?.id;
+  const text = message?.text;
 
-exports.handler = async (req, res) => {
-  if (req.method === 'POST') {
-    await bot.handleUpdate(req.body);
-    res.status(200).send('OK');
-  } else {
-    res.status(200).send('Bot is running.');
+  if (!chatId || !text) return res.status(200).send('Invalid Telegram message');
+
+  if (text === '/btc') {
+    try {
+      const response = await axios.get('https://api.bitget.com/api/v2/market/ticker?symbol=BTCUSDT');
+      const price = response.data.data.last;
+
+      await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
+        chat_id: chatId,
+        text: `🪙 BTC 現價：${price}`
+      });
+
+      return res.status(200).send('Message sent');
+    } catch (error) {
+      console.error('Error:', error);
+      return res.status(500).send('Error fetching price');
+    }
   }
+
+  return res.status(200).send('Command not handled');
 };
